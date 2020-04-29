@@ -1,10 +1,12 @@
+#ifndef UNTITLED_THREAD_H
+#define UNTITLED_THREAD_H
 //-----------INCLUDES----------//
 #include <stdio.h>
 #include <setjmp.h>
 
 //------------DEFINES----------//
-#ifndef UNTITLED_THREAD_H
-#define UNTITLED_THREAD_H
+#define STACK_SIZE 4096
+
 
 class Thread
 {
