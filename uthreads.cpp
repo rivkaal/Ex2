@@ -3,8 +3,8 @@
 #include "Thread.h"
 #include <queue>
 
-
 int sizeOfQuantomArray;
+std::vector<int> queueThreads;
 std::deque<Thread*> ReadyQueue;
 
 /*
