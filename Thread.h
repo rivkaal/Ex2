@@ -1,14 +1,27 @@
-//
-// Created by Tamar on 28/04/2020.
-//
+//-----------INCLUDES----------//
+#include <stdio.h>
+#include <setjmp.h>
 
+//------------DEFINES----------//
 #ifndef UNTITLED_THREAD_H
 #define UNTITLED_THREAD_H
 
-#endif //UNTITLED_THREAD_H
-
 class Thread
 {
+private:
+
     int idThread;
-    sigjmp_buf env;
+
+public:
+
+    Thread(int idThread);;
+
+    //Todo do i need a destructor?
+
+
+    int getId();;
+
+
 };
+
+#endif //UNTITLED_THREAD_H
