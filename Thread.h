@@ -6,6 +6,7 @@
 
 //------------DEFINES----------//
 #define STACK_SIZE 4096
+enum State{ RUNNIMG, BLOCKED, WAITING};
 
 
 class Thread
@@ -14,12 +15,13 @@ private:
 
     State state;
     int idThread;
+    int priority
     int countQuantom;
     //TODO define stack size. how much size?
 
 public:
 
-    Thread(int idThread);
+    Thread(int idThread, int priority);
 
     //Todo do i need a destructor?
      // i think we'd need a destructor maybe to delete the stack of the thread when it finishes

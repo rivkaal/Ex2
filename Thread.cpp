@@ -4,9 +4,11 @@
 #include "Thread.h"
 
 
-Thread::Thread(int idThread)
+Thread::Thread(int idThread, int priority)
 {
     this->idThread = idThread;
+    this -> priority = priority;
+    this -> state = WAITING;
 }
 
 int Thread::getId()

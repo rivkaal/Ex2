@@ -6,6 +6,8 @@
 int sizeOfQuantomArray;
 std::vector<int> queueThreads;
 std::deque<Thread*> ReadyQueue;
+std:: priority_queue<int, std::vector<int>, std::greater<int>> availibleIDs;
+Thread *runningThread;
 
 /*
  * Description: This function initializes the thread library.
@@ -18,12 +20,27 @@ std::deque<Thread*> ReadyQueue;
 */
 int uthread_init(int *quantum_usecs, int size)
 {
+    if (size <= 0)
+    {
+        std:cerr << "thread library error: Invalid size of array\n" << std:endl;
+        return -1;
+    }
+    for(auto i = 0; i < size; ++i)
+    {
+        if(quantum_usecs <= 0)
+        {
+            std:cerr << "thread library error: Invalid value in array\n" << std:endl;
+            return -1;
+        }
+    }
     sizeOfQuantomArray = size;
 
-    for (int i = 1 ; i < MAX_THREAD_NUM +1; i++)
+    for (int i = 1 ; i <= MAX_THREAD_NUM ; i++)
     {
-
+        availibleIDs.push(i);
     }
+    runningThread = new Thread(0, 0);
+    return 0;
 };
 
 
