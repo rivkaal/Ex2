@@ -15,27 +15,25 @@ private:
 
     State state;
     int idThread;
-    int priority
+    int priority;
     int countQuantom;
-    //TODO define stack size. how much size?
 
 public:
 
     Thread(int idThread, int priority);
 
-    //Todo do i need a destructor?
-     // i think we'd need a destructor maybe to delete the stack of the thread when it finishes
+    ~Thread();
 
-    int getId(){};
+    int getId();
 
     sigjmp_buf &getState() const;
 
-    void setState(State state){};
+    void setState(State state);
 
 
-    int getCountQuantom();;
+    int getCountQuantom();
 
-    void raisinCountQuantom();;
+    void raisinCountQuantom();
 
 };
 

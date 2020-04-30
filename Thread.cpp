@@ -16,7 +16,10 @@ int Thread::getId()
     return idThread;
 }
 
-sigjmp_buf &Thread::getState();
+sigjmp_buf &Thread::getState() const
+{
+
+}
 
 sigjmp_buf &getState();
 
