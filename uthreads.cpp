@@ -1,4 +1,4 @@
-//-----------INCLUDES----------//
+//-----------------INCLUDE-----------------//
 #include "uthreads.h"
 #include <sys/time.h>
 #include <signal.h>
@@ -9,15 +9,50 @@
 #include "Thread.h"
 #include <queue>
 #include <iostream>
+#include <deque>
+
+//-----------------DEFINES-----------------//
+#define LIBRARY_ERROR "thread library error: "
+#define SYSTEM_ERROR "system error: "
+#define FAILURE -1
+
 
 int sizeOfQuantomArray;
 int *quantumArray;
-std::vector <int>  queueThreads; ///why do we need this??
 std::deque<Thread*> ReadyQueue;
 std:: priority_queue<int, std::vector<int>, std::greater<int>> availibleIDs;
 Thread *runningThread;
 struct sigaction sa;
 struct itimerval timer;
+sigset_t set;
+
+//-----------------FUNCTIONS-----------------//
+
+/**
+ * blocks the signals
+ */
+void blockSignals()
+{
+    if (sigprocmask(SIG_BLOCK, &set, nullptr))
+    {
+        cerr << "system error: calling sigprocmask failed" << endl;
+        exit(1);
+    }
+}
+
+
+/**
+ * unblocks signals
+ */
+void unblockSignals()
+{
+    if (sigprocmask(SIG_UNBLOCK, &set, nullptr))
+    {
+       std::cerr << "calling sigprocmask failed" << std::endl;
+        exit(1);
+    }
+}
+
 
 /**
  * function that will work each time thread will run out of time.
@@ -33,10 +68,15 @@ void timer_handler()
     }
 }
 
-void RoundRobin()
+
+void round_robin()
 {
 
 }
+
+
+void my_handler(int sig_num);
+
 
 /*
  * Description: This function initializes the thread library.
@@ -72,10 +112,28 @@ int uthread_init(const int *quantum_usecs, int size)
     {
         availibleIDs.push(i);
     }
-    runningThread = new Thread(0, 0);
+    runningThread = new Thread(0, 0, nullptr);
+
+    //TODO check if can call or return value isnt valid.
+    sigemptyset(&set);
+    sigaddset(&set, SIGVTALRM);
+    sigprocmask(SIG_SETMASK, &set, nullptr);
+
+    sa = {0};
+    sa.sa_handler = &my_handler;
+    if (sigaction(SIGVTALRM, &sa, nullptr))
+    {
+        std::cerr << "to do err" << std::endl;
+    }
+    //TODO set timer
+
     return 0;
 };
 
+void sig_func()
+{
+
+}
 
 /*
  * Description: This function creates a new thread, whose entry point is the
@@ -90,8 +148,24 @@ int uthread_init(const int *quantum_usecs, int size)
 */
 int uthread_spawn(void (*f)(void), int priority)
 {
-    return 0;
+    blockSignals();
+    int tidThread = availibleIDs.top();
+
+    if (tidThread >= MAX_THREAD_NUM)
+    {
+        std::cerr << LIBRARY_ERROR "could not spawn more threads" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+    Thread *newThread = new Thread(tidThread, priority, f); // todo check if allocated stack for thread
+    // todo check if need to do try and catch in case can't allocate space for thread etc..
+    newThread->setState(State::READY); // todo check if this is necessary for later use
+    availibleIDs.pop();
+    ReadyQueue.push_back(newThread);
+    unblockSignals();
+    return tidThread;
 };
+
 
 int main()
 {

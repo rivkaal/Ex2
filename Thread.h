@@ -6,8 +6,7 @@
 
 //------------DEFINES----------//
 #define STACK_SIZE 4096
-enum State{ RUNNIMG, BLOCKED, WAITING};
-
+enum State{RUNNING, BLOCKED, READY}; // todo notice : i changed waiting to ready..why waiting?
 
 class Thread
 {
@@ -18,9 +17,10 @@ private:
     int priority;
     int countQuantom;
 
+
 public:
 
-    Thread(int idThread, int priority);
+    Thread(int idThread, int priority, void (*f)(void));
 
     ~Thread();
 
@@ -30,10 +30,10 @@ public:
 
     void setState(State state);
 
-
     int getCountQuantom();
 
     void raisinCountQuantom();
+
 
 };
 

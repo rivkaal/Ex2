@@ -4,11 +4,11 @@
 #include "Thread.h"
 
 
-Thread::Thread(int idThread, int priority)
+Thread::Thread(int idThread ,int priority, void (*f)(void))
 {
     this->idThread = idThread;
     this -> priority = priority;
-    this -> state = WAITING;
+//    this -> state = WAITING; //why? there's no waiting state. we only have blocked, ready and running. i dont think we need this.
 }
 
 int Thread::getId()
@@ -21,7 +21,10 @@ sigjmp_buf &Thread::getState() const
 
 }
 
-sigjmp_buf &getState();
+sigjmp_buf &Thread::setState(state)
+{
+    this -> state =  state;
+}
 
 int Thread::getCountQuantom()
 {
@@ -32,6 +35,14 @@ void Thread::raisinCountQuantom()
 {
     countQuantom++;
 }
+
+
+void setFFunc()
+{
+
+}
+
+
 
 
 
