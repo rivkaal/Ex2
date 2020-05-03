@@ -21,7 +21,7 @@ sigjmp_buf &Thread::getState() const
 
 }
 
-sigjmp_buf &Thread::setState(state)
+ void Thread::setState(State state)
 {
     this -> state =  state;
 }

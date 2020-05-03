@@ -35,7 +35,7 @@ void blockSignals()
 {
     if (sigprocmask(SIG_BLOCK, &set, nullptr))
     {
-        cerr << "system error: calling sigprocmask failed" << endl;
+        std::cerr << "system error: calling sigprocmask failed" << std::endl;
         exit(1);
     }
 }
@@ -63,8 +63,8 @@ void timer_handler()
     {
         runningThread->raisinCountQuantom();
     } else{
-       runningThread->setState(WAITING);
-
+       runningThread->setState(READY);
+       ReadyQueue.push_back(runningThread);
     }
 }
 
@@ -165,6 +165,14 @@ int uthread_spawn(void (*f)(void), int priority)
     unblockSignals();
     return tidThread;
 };
+
+/*
+ * Description: This function changes the priority of the thread with ID tid.
+ * If this is the current running thread, the effect should take place only the
+ * next time the thread gets scheduled.
+ * Return value: On success, return 0. On failure, return -1.
+*/
+int uthread_change_priority(int tid, int priority);
 
 
 int main()
