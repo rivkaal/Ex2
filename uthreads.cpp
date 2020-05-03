@@ -20,6 +20,7 @@
 
 int sizeOfQuantomArray;
 int *quantumArray;
+int totalQuantums;
 std::deque<Thread*> ReadyQueue;
 std:: priority_queue<int, std::vector<int>, std::greater<int>> availibleIDs;
 std::map <int, Thread*> threads;
@@ -210,12 +211,13 @@ int uthread_get_tid()
 */
 int uthread_get_total_quantums()
 {
-    int total = 0;
-    for (auto const& x : threads)
-    {
-        total += x.second->getCountQuantom();
-    }
-    return total;
+    return totalQuantums;
+//    int total = 0;
+//    for (auto const& x : threads)
+//    {
+//        total += x.second->getCountQuantom(); // not sure... maybe we need just a variable with all quantums?
+//    }
+//    return total;
 }
 
 
@@ -229,7 +231,10 @@ int uthread_get_total_quantums()
  * Return value: On success, return the number of quantums of the thread with ID tid.
  * 			     On failure, return -1.
 */
-int uthread_get_quantums(int tid);
+int uthread_get_quantums(int tid)
+{
+    return threads[tid] -> getCountQuantom();
+}
 
 int main()
 {

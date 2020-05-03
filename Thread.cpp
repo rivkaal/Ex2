@@ -9,6 +9,7 @@ Thread::Thread(int idThread ,int priority, void (*f)(void))
     this->_idThread = idThread;
     this -> _priority = priority;
     this -> _state = READY;
+    this -> _countQuantom = 0;
 }
 
 int Thread::getId()
