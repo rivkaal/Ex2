@@ -6,34 +6,39 @@
 
 Thread::Thread(int idThread ,int priority, void (*f)(void))
 {
-    this->idThread = idThread;
-    this -> priority = priority;
-//    this -> state = WAITING; //why? there's no waiting state. we only have blocked, ready and running. i dont think we need this.
+    this->_idThread = idThread;
+    this -> _priority = priority;
+    this -> _state = READY;
 }
 
 int Thread::getId()
 {
-    return idThread;
+    return _idThread;
 }
 
-sigjmp_buf &Thread::getState() const
+State Thread::getState() const
 {
-
+    return _state;
 }
 
  void Thread::setState(State state)
 {
-    this -> state =  state;
+    this -> _state =  state;
+}
+
+void Thread::setPriority(int prioriry)
+{
+    this -> _priority = prioriry;
 }
 
 int Thread::getCountQuantom()
 {
-    return countQuantom;
+    return _countQuantom;
 }
 
 void Thread::raisinCountQuantom()
 {
-    countQuantom++;
+    _countQuantom++;
 }
 
 

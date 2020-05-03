@@ -12,10 +12,10 @@ class Thread
 {
 private:
 
-    State state;
-    int idThread;
-    int priority;
-    int countQuantom;
+    State _state;
+    int _idThread;
+    int _priority;
+    int _countQuantom;
 
 
 public:
@@ -26,9 +26,11 @@ public:
 
     int getId();
 
-    sigjmp_buf &getState() const;
+    State getState() const;
 
     void setState(State state);
+
+    void setPriority(int prioriry);
 
     int getCountQuantom();
 

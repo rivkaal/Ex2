@@ -10,6 +10,7 @@
 #include <queue>
 #include <iostream>
 #include <deque>
+#include <map>
 
 //-----------------DEFINES-----------------//
 #define LIBRARY_ERROR "thread library error: "
@@ -21,6 +22,7 @@ int sizeOfQuantomArray;
 int *quantumArray;
 std::deque<Thread*> ReadyQueue;
 std:: priority_queue<int, std::vector<int>, std::greater<int>> availibleIDs;
+std::map <int, Thread*> threads;
 Thread *runningThread;
 struct sigaction sa;
 struct itimerval timer;
@@ -162,6 +164,7 @@ int uthread_spawn(void (*f)(void), int priority)
     newThread->setState(State::READY); // todo check if this is necessary for later use
     availibleIDs.pop();
     ReadyQueue.push_back(newThread);
+    threads[tidThread] = newThread;
     unblockSignals();
     return tidThread;
 };
@@ -172,7 +175,20 @@ int uthread_spawn(void (*f)(void), int priority)
  * next time the thread gets scheduled.
  * Return value: On success, return 0. On failure, return -1.
 */
-int uthread_change_priority(int tid, int priority);
+int uthread_change_priority(int tid, int priority)
+{
+    Thread *threadToChange = threads[tid];
+    if(threadToChange == nullptr)
+    {
+        return -1;
+    }
+    if(threadToChange->getState() == RUNNING)
+    {
+        // not sure if we are using priority while running
+    }
+    threadToChange->setPriority(priority);
+    return 0;
+}
 
 
 int main()
