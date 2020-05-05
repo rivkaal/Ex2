@@ -250,21 +250,15 @@ int uthread_block(int tid)
         return SUCCESS;
     }
 
-    if (threadToBlock -> getState() == RUNNING) // todo check if could be ready also
+    if (sigsetjmp(threadToBlock -> getEnv(), 1))
     {
-        if (sigsetjmp(threadToBlock -> getEnv(), 1))
-        {
-            unblockSignals();
-            //todo err
-        }
-
-        threadToBlock = runningThread;
-        runningThread -> setState(BLOCKED);
-        my_handler(0);
-//        }
         unblockSignals();
-        return SUCCESS;
+            //todo err
     }
+    runningThread -> setState(BLOCKED);
+    my_handler(0);
+    unblockSignals();
+    return SUCCESS;
 }
 
 /*
