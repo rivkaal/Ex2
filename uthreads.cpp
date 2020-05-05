@@ -57,24 +57,18 @@ void unblockSignals()
     }
 }
 
-
-/**
- * function that will work each time thread will run out of time.
- */
-void timer_handler()
+void setTimer()
 {
-    totalQuantums ++;
-    if(ReadyQueue.empty())
-    {
-        runningThread->raisinCountQuantom();
-    } else{
-       runningThread->setState(READY);
-       ReadyQueue.push_back(runningThread);
-    }
+    timer.it_value.tv_sec = 0;		// first time interval, seconds part
+    timer.it_value.tv_usec = quantumArray[runningThread->getPriority()];		// first time interval, microseconds part
+
+    // configure the timer to expire every 3 sec after that.
+    timer.it_interval.tv_sec = 0;	// following time intervals, seconds part
+    timer.it_interval.tv_usec = quantumArray[runningThread->getPriority()];	// following time intervals, microseconds part
 }
 
 
-void robin_round_algo(bool amIBlocked)
+void robin_round_algo()
 {
     blockSignals();
 
@@ -101,6 +95,23 @@ void robin_round_algo(bool amIBlocked)
     }
 
     unblockSignals();
+}
+
+
+/**
+ * function that will work each time thread will run out of time.
+ */
+void timer_handler(int sig)
+{
+    totalQuantums ++;
+    if(ReadyQueue.empty())
+    {
+        runningThread->raisinCountQuantom();
+    } else{
+        runningThread->setState(READY);
+        ReadyQueue.push_back(runningThread);
+    }
+    robin_round_algo();
 }
 
 
@@ -149,14 +160,21 @@ int uthread_init(const int *quantum_usecs, int size)
     sigprocmask(SIG_SETMASK, &set, nullptr);
 
     sa = {0};
-    sa.sa_handler = &my_handler;
+    sa.sa_handler = &timer_handler;
     if (sigaction(SIGVTALRM, &sa, nullptr))
     {
         std::cerr << "to do err" << std::endl;
     }
+    setTimer();
+    if(setitimer (ITIMER_VIRTUAL, &timer, NULL))
+    {
+        std::cerr << SYSTEM_ERROR << std::endl;
+        return FAILURE;
+    }
     //TODO set timer
 
-    return 0;
+
+    return SUCCESS;
 };
 
 
@@ -256,7 +274,7 @@ int uthread_block(int tid)
             //todo err
     }
     runningThread -> setState(BLOCKED);
-    my_handler(0);
+    timer_handler(0);
     unblockSignals();
     return SUCCESS;
 }
@@ -274,14 +292,42 @@ int uthread_block(int tid)
 */
 int uthread_terminate(int tid)
 {
+    if( tid == 0)
+    {
+        for (auto const& thread:threads )
+        {
+            uthread_terminate(thread.first);
+        }
+        ReadyQueue.clear();
+        while(!availibleIDs.empty())
+        {
+            availibleIDs.pop();
+        }
+        threads.clear();
+        exit(EXIT_SUCCESS);
+    }
+    if (tid < 0 || tid > MAX_THREAD_NUM)
+    {
+        return  FAILURE;
+    }
     Thread *toTerminate = threads[tid];
     if(toTerminate == nullptr)
     {
         return FAILURE;
     }
-    int id = toTerminate->getId();
-    availibleIDs.push(id);
-    threads.erase(id);
+    availibleIDs.push(tid);
+    threads.erase(tid);
+    if(toTerminate ->getState() == READY)
+    {
+        std::deque<Thread*>::iterator th;
+        for(th = ReadyQueue.begin(); th != ReadyQueue.end(); ++th)
+        {
+            if((*th)->getId() == tid)
+            {
+                ReadyQueue.erase(th);
+            }
+        }
+    }
     delete(toTerminate);
     return  SUCCESS;
 }

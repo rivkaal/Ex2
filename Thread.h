@@ -37,6 +37,8 @@ public:
 
     void setPriority(int prioriry);
 
+    int getPriority();
+
     int getCountQuantom();
 
     void raisinCountQuantom();
