@@ -16,6 +16,7 @@
 #define LIBRARY_ERROR "thread library error: "
 #define SYSTEM_ERROR "system error: "
 #define FAILURE -1
+#define SUCCESS 0
 
 
 int sizeOfQuantomArray;
@@ -62,6 +63,7 @@ void unblockSignals()
  */
 void timer_handler()
 {
+    totalQuantums ++;
     if(ReadyQueue.empty())
     {
         runningThread->raisinCountQuantom();
@@ -72,9 +74,33 @@ void timer_handler()
 }
 
 
-void round_robin()
+void robin_round_algo(bool amIBlocked)
 {
+    blockSignals();
 
+
+//    if (runningThread->getState() == TERMINATED)
+//    {
+//        //todo delete stack and free etc.
+//        uthread_terminate(runningThread->getId());
+//    }
+
+
+    int val = sigsetjmp(runningThread -> getEnv(), 1);
+    if (val == 0) // switch threads
+    {
+//        if (runningThread -> getState() != BLOCKED) // if i'm not blocked - go to end of ready list
+//        {
+//            runningThread -> setState(READY);
+//            ReadyQueue.push_back(runningThread);
+//        } // handeled by time handler
+        runningThread = ReadyQueue.front();
+        runningThread -> setState(RUNNING);
+        ReadyQueue.pop_front();
+        siglongjmp(runningThread ->getEnv(), 1);
+    }
+
+    unblockSignals();
 }
 
 
@@ -133,10 +159,11 @@ int uthread_init(const int *quantum_usecs, int size)
     return 0;
 };
 
-void sig_func()
-{
 
-}
+//void sig_func()
+//{
+//
+//}
 
 /*
  * Description: This function creates a new thread, whose entry point is the
@@ -183,12 +210,86 @@ int uthread_change_priority(int tid, int priority)
     {
         return -1;
     }
-    if(threadToChange->getState() == RUNNING)
-    {
-        // not sure if we are using priority while running
-    }
+//    if(threadToChange->getState() == RUNNING)
+//    {
+//        // not sure if we are using priority while running
+//    }
     threadToChange->setPriority(priority);
     return 0;
+}
+
+/*
+ * Description: This function blocks the thread with ID tid. The thread may
+ * be resumed later using uthread_resume. If no thread with ID tid exists it
+ * is considered as an error. In addition, it is an error to try blocking the
+ * main thread (tid == 0). If a thread blocks itself, a scheduling decision
+ * should be made. Blocking a thread in BLOCKED state has no
+ * effect and is not considered an error.
+ * Return value: On success, return 0. On failure, return -1.
+*/
+int uthread_block(int tid)
+{
+    blockSignals();
+
+    if (tid <= 0 || tid > MAX_THREAD_NUM)
+    {
+        std::cerr << LIBRARY_ERROR "can't block thread with illegal tid" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+
+    Thread *threadToBlock = threads.find(tid) -> second;
+    if (threadToBlock == nullptr)
+    {
+        return FAILURE;
+    }
+
+    if (threadToBlock -> getState() == BLOCKED)
+    {
+        unblockSignals();
+        return SUCCESS;
+    }
+
+    if (threadToBlock -> getState() == RUNNING) // todo check if could be ready also
+    {
+        if (sigsetjmp(threadToBlock -> getEnv(), 1))
+        {
+            unblockSignals();
+            //todo err
+        }
+
+        threadToBlock = runningThread;
+        runningThread -> setState(BLOCKED);
+        my_handler(0);
+//        }
+        unblockSignals();
+        return SUCCESS;
+    }
+}
+
+/*
+ * Description: This function terminates the thread with ID tid and deletes
+ * it from all relevant control structures. All the resources allocated by
+ * the library for this thread should be released. If no thread with ID tid
+ * exists it is considered an error. Terminating the main thread
+ * (tid == 0) will result in the termination of the entire process using
+ * exit(0) [after releasing the assigned library memory].
+ * Return value: The function returns 0 if the thread was successfully
+ * terminated and -1 otherwise. If a thread terminates itself or the main
+ * thread is terminated, the function does not return.
+*/
+int uthread_terminate(int tid)
+{
+    Thread *toTerminate = threads[tid];
+    if(toTerminate == nullptr)
+    {
+        return FAILURE;
+    }
+    int id = toTerminate->getId();
+    availibleIDs.push(id);
+    threads.erase(id);
+    delete(toTerminate);
+    return  SUCCESS;
 }
 
 /*

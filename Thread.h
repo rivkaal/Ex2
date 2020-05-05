@@ -3,6 +3,9 @@
 //-----------INCLUDES----------//
 #include <stdio.h>
 #include <setjmp.h>
+#include <signal.h>
+#include <unistd.h>
+#include <sys/time.h>
 
 //------------DEFINES----------//
 #define STACK_SIZE 4096
@@ -16,6 +19,8 @@ private:
     int _idThread;
     int _priority;
     int _countQuantom;
+    char _stack[STACK_SIZE];
+    sigjmp_buf _env;
 
 
 public:
@@ -35,6 +40,8 @@ public:
     int getCountQuantom();
 
     void raisinCountQuantom();
+
+    sigjmp_buf &getEnv();
 
 
 };
