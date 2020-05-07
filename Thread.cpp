@@ -57,8 +57,8 @@ Thread::Thread(int idThread ,int priority, void (*f)(void))
     sp = (address_t)_stack + STACK_SIZE - sizeof(address_t);
     pc = (address_t)f;
     sigsetjmp(_env, 1);
-    (_env->__jmpbuf)[JB_SP] = translate_address(sp);
-    (_env ->__jmpbuf)[JB_PC] = translate_address(pc);
+    _env ->__jmpbuf[JB_SP] = translate_address(sp);
+    _env ->__jmpbuf[JB_PC] = translate_address(pc);
     sigemptyset(&_env->__saved_mask);
 }
 

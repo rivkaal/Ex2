@@ -2,6 +2,7 @@
 #define UNTITLED_THREAD_H
 //-----------INCLUDES----------//
 #include <stdio.h>
+#include <csignal>
 #include <setjmp.h>
 #include <signal.h>
 #include <unistd.h>

@@ -82,12 +82,12 @@ void robin_round_algo()
 
     int val = sigsetjmp(runningThread -> getEnv(), 1);
     if (val == 0) // switch threads
-    {
+    {  // handeled by time handler
 //        if (runningThread -> getState() != BLOCKED) // if i'm not blocked - go to end of ready list
 //        {
 //            runningThread -> setState(READY);
 //            ReadyQueue.push_back(runningThread);
-//        } // handeled by time handler
+//        }
         runningThread = ReadyQueue.front();
         runningThread -> setState(RUNNING);
         ReadyQueue.pop_front();
@@ -199,9 +199,15 @@ int uthread_spawn(void (*f)(void), int priority)
     blockSignals();
     int tidThread = availibleIDs.top();
 
-    if (tidThread >= MAX_THREAD_NUM)
+    if (tidThread >= MAX_THREAD_NUM) //there couldn't be numbers bigger then max thread num
     {
-        std::cerr << LIBRARY_ERROR "could not spawn more threads" << std::endl;
+        std::cerr << LIBRARY_ERROR " could not spawn more threads" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+    if (priority >= sizeOfQuantomArray || priority < 0)
+    {
+        std::cerr << LIBRARY_ERROR " priority is invalid" << std::endl;
         unblockSignals();
         return FAILURE;
     }
@@ -223,10 +229,11 @@ int uthread_spawn(void (*f)(void), int priority)
 */
 int uthread_change_priority(int tid, int priority)
 {
-    Thread *threadToChange = threads[tid];
+    Thread *threadToChange = threads.find(tid)->second;
     if(threadToChange == nullptr)
     {
-        return -1;
+        std::cerr << LIBRARY_ERROR " invalid id number" << std::endl;
+        return FAILURE;
     }
 //    if(threadToChange->getState() == RUNNING)
 //    {
@@ -259,6 +266,8 @@ int uthread_block(int tid)
     Thread *threadToBlock = threads.find(tid) -> second;
     if (threadToBlock == nullptr)
     {
+        std::cerr << LIBRARY_ERROR "can't block non existed thread" << std::endl;
+        unblockSignals();
         return FAILURE;
     }
 
@@ -270,11 +279,60 @@ int uthread_block(int tid)
 
     if (sigsetjmp(threadToBlock -> getEnv(), 1))
     {
+
+
+        std::cerr << SYSTEM_ERROR "sygsetjmp failed" << std::endl;
         unblockSignals();
-            //todo err
+        return FAILURE;
     }
-    runningThread -> setState(BLOCKED);
+    threadToBlock -> setState(BLOCKED);
     timer_handler(0);
+    unblockSignals();
+    return SUCCESS;
+}
+
+/*
+ * Description: This function resumes a blocked thread with ID tid and moves
+ * it to the READY state. Resuming a thread in a RUNNING or READY state
+ * has no effect and is not considered as an error. If no thread with
+ * ID tid exists it is considered an error.
+ * Return value: On success, return 0. On failure, return -1.
+*/
+int uthread_resume(int tid)
+{
+    blockSignals();
+
+    if (tid <= 0 || tid > MAX_THREAD_NUM)
+    {
+        std::cerr << LIBRARY_ERROR "can't block thread with illegal tid" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+
+    Thread *threadToBlock = threads.find(tid) -> second;
+    if (threadToBlock == nullptr)
+    {
+        std::cerr << LIBRARY_ERROR "can't block non existed thread" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+
+    if (threadToBlock -> getState() != BLOCKED)
+    {
+        unblockSignals();
+        return SUCCESS;
+    }
+
+    if (sigsetjmp(threadToBlock -> getEnv(), 1))
+    {
+
+
+        std::cerr << SYSTEM_ERROR "sygsetjmp failed" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+    threadToBlock -> setState(READY);
+    ReadyQueue.push_back(threadToBlock);
     unblockSignals();
     return SUCCESS;
 }
@@ -308,11 +366,13 @@ int uthread_terminate(int tid)
     }
     if (tid < 0 || tid > MAX_THREAD_NUM)
     {
+        std::cerr << LIBRARY_ERROR " invalid id number" << std::endl;
         return  FAILURE;
     }
-    Thread *toTerminate = threads[tid];
+    Thread *toTerminate = threads.find(tid)->second;
     if(toTerminate == nullptr)
     {
+        std::cerr << LIBRARY_ERROR " there is ni thread with this id" << std::endl;
         return FAILURE;
     }
     availibleIDs.push(tid);
@@ -374,10 +434,15 @@ int uthread_get_total_quantums()
 */
 int uthread_get_quantums(int tid)
 {
-    return threads[tid] -> getCountQuantom();
+    if (threads.find(tid)->second != NULL)
+    {
+        return threads.find(tid)->second -> getCountQuantom();
+    }
+    std::cerr << LIBRARY_ERROR "invalid id" <<std::endl;
+    return FAILURE;
 }
 
-int main()
-{
-    return  0;
-}
+//int main()
+//{
+//    return  0;
+//}
