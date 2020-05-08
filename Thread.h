@@ -1,5 +1,4 @@
-#ifndef UNTITLED_THREAD_H
-#define UNTITLED_THREAD_H
+#ifndef UNTITLED_THREzAD_
 //-----------INCLUDES----------//
 #include <stdio.h>
 #include <csignal>
@@ -9,7 +8,8 @@
 #include <sys/time.h>
 
 //------------DEFINES----------//
-#define STACK_SIZE 4096
+//#define STACK_SIZE 4096 TODO CHANGED THIS FOR KARVNAL TESTS
+#define STACK_SIZE 8192
 enum State{RUNNING, BLOCKED, READY}; // todo notice : i changed waiting to ready..why waiting?
 
 class Thread

@@ -45,7 +45,6 @@ address_t translate_address(address_t addr)
 
 #endif
 
-
 Thread::Thread(int idThread ,int priority, void (*f)(void))
 {
     this->_idThread = idThread;
