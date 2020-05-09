@@ -1,44 +1,4 @@
-//-----------------INCLUDE-----------------//
-#ifdef __x86_64__
-/* code for 64 bit Intel arch */
 
-typedef unsigned long address_t;
-#define JB_SP 6
-#define JB_PC 7
-
-/* A translation is required when using an address of a variable.
-   Use this as a black box in your code. */
-address_t translate_address(address_t addr)
-{
-    address_t ret;
-    asm volatile("xor    %%fs:0x30,%0\n"
-                 "rol    $0x11,%0\n"
-    : "=g" (ret)
-    : "0" (addr));
-    return ret;
-}
-
-#else
-/* code for 32 bit Intel arch */
-
-
-typedef unsigned int address_t;
-#define JB_SP 4
-#define JB_PC 5
-
-/* A translation is required when using an address of a variable.
-   Use this as a black box in your code. */
-address_t translate_address(address_t addr)
-{
-    address_t ret;
-    asm volatile("xor    %%gs:0x18,%0\n"
-                 "rol    $0x9,%0\n"
-    : "=g" (ret)
-    : "0" (addr));
-    return ret;
-}
-
-#endif
 #include "uthreads.h"
 #include <sys/time.h>
 #include <signal.h>
@@ -51,18 +11,22 @@ address_t translate_address(address_t addr)
 #include <iostream>
 #include <deque>
 #include <map>
+#include <cmath>
+#include <algorithm>
 
 //-----------------DEFINES-----------------//
 #define LIBRARY_ERROR "thread library error: "
 #define SYSTEM_ERROR "system error: "
 #define FAILURE -1
 #define SUCCESS 0
+#define SECOND 1000000
+#define MAIN_THREAD 0
 
 
 int sizeOfQuantomArray;
 int *quantumArray;
-int totalQuantums;
-std::deque<Thread*> ReadyQueue;
+int totalQuantums = 0;
+std::deque <Thread*> ReadyQueue;
 std:: priority_queue<int, std::vector<int>, std::greater<int>> availibleIDs;
 std::map <int, Thread*> threads;
 Thread *runningThread;
@@ -80,7 +44,7 @@ void blockSignals()
 {
     if (sigprocmask(SIG_BLOCK, &set, nullptr))
     {
-        std::cerr << "system error: calling sigprocmask failed" << std::endl;
+        std::cerr << SYSTEM_ERROR << " calling sigprocmask failed" << std::endl;
         exit(1);
     }
 }
@@ -93,49 +57,45 @@ void unblockSignals()
 {
     if (sigprocmask(SIG_UNBLOCK, &set, nullptr))
     {
-       std::cerr << "calling sigprocmask failed" << std::endl;
+        std::cerr << SYSTEM_ERROR<<"calling sigprocmask failed" << std::endl;
         exit(1);
     }
 }
 
+
 void setTimer()
 {
-    timer.it_value.tv_sec = 0;		// first time interval, seconds part
-    timer.it_value.tv_usec = quantumArray[runningThread->getPriority()];		// first time interval, microseconds part
+    int sec =  quantumArray[runningThread->getPriority()] / SECOND;
+    int msec =  quantumArray[runningThread->getPriority()] % SECOND;
+    timer.it_value.tv_sec = sec;		// first time interval, seconds part
+    timer.it_value.tv_usec = msec;	// first time interval, microseconds part
 
-    // configure the timer to expire every 3 sec after that.
-    timer.it_interval.tv_sec = 0;	// following time intervals, seconds part
-    timer.it_interval.tv_usec = quantumArray[runningThread->getPriority()];	// following time intervals, microseconds part
+    // same after that.
+    timer.it_interval.tv_sec = sec;	// following time intervals, seconds part
+    timer.it_interval.tv_usec = msec;	// following time intervals, microseconds part
+
+    if(setitimer (ITIMER_VIRTUAL, &timer, nullptr))
+    {
+        std::cerr << SYSTEM_ERROR << std::endl;
+        exit(1);
+    }
+
 }
 
 
-void robin_round_algo()
+void setThreadToRun()
 {
-    blockSignals();
-
-
-//    if (runningThread->getState() == TERMINATED)
-//    {
-//        //todo delete stack and free etc.
-//        uthread_terminate(runningThread->getId());
-//    }
-
-
+    totalQuantums++;
     int val = sigsetjmp(runningThread -> getEnv(), 1);
-    if (val == 0) // switch threads
-    {  // handeled by time handler
-//        if (runningThread -> getState() != BLOCKED) // if i'm not blocked - go to end of ready list
-//        {
-//            runningThread -> setState(READY);
-//            ReadyQueue.push_back(runningThread);
-//        }
+    if (val == 0)
+    {
         runningThread = ReadyQueue.front();
-        runningThread -> setState(RUNNING);
+        runningThread->setState(RUNNING);
+        runningThread->raisinCountQuantom();
         ReadyQueue.pop_front();
-        siglongjmp(runningThread ->getEnv(), 1);
+        setTimer();
+        siglongjmp(runningThread->getEnv(), 1);
     }
-
-    unblockSignals();
 }
 
 
@@ -144,19 +104,18 @@ void robin_round_algo()
  */
 void timer_handler(int sig)
 {
-    totalQuantums ++;
+    blockSignals();
     if(ReadyQueue.empty())
     {
         runningThread->raisinCountQuantom();
+        totalQuantums++;
     } else{
         runningThread->setState(READY);
         ReadyQueue.push_back(runningThread);
+        setThreadToRun();
     }
-    robin_round_algo();
+    unblockSignals();
 }
-
-
-void my_handler(int sig_num);
 
 
 /*
@@ -168,12 +127,13 @@ void my_handler(int sig_num);
  * size - is the size of the array.
  * Return value: On success, return 0. On failure, return -1.
 */
-int uthread_init(const int *quantum_usecs, int size)
+int uthread_init(int *quantum_usecs, int size)
 {
     if (size <= 0)
     {
-        std::cerr << "thread library error: Invalid size of array\n" << std::endl;
-        return -1;
+        std::cerr << LIBRARY_ERROR << " Invalid size"<< std::endl;
+        unblockSignals();
+        return FAILURE;
     }
 
     quantumArray = new int[size];
@@ -181,48 +141,65 @@ int uthread_init(const int *quantum_usecs, int size)
     {
         if(quantum_usecs[i] <= 0)
         {
-            std::cerr << "thread library error: Invalid value in array\n" << std::endl;
+            std::cerr << LIBRARY_ERROR<<" Invalid value in array" << std::endl;
             free(quantumArray);
-            return -1;
+            unblockSignals();
+            return FAILURE;
         }
         quantumArray[i] = quantum_usecs[i];
     }
     sizeOfQuantomArray = size;
 
-    for (int i = 1 ; i <= MAX_THREAD_NUM ; i++)
+    for (int i = 1 ; i < MAX_THREAD_NUM ; ++i)
     {
         availibleIDs.push(i);
     }
-    runningThread = new Thread(0, 0, nullptr);
+    totalQuantums ++;
 
-    //TODO check if can call or return value isnt valid.
-    sigemptyset(&set);
-    sigaddset(&set, SIGVTALRM);
-    sigprocmask(SIG_SETMASK, &set, nullptr);
-
-    sa = {0};
-    sa.sa_handler = &timer_handler;
-    if (sigaction(SIGVTALRM, &sa, nullptr))
+    try
     {
-        std::cerr << "to do err" << std::endl;
+        runningThread = new Thread(0, 0, nullptr);
     }
-    setTimer();
-    if(setitimer (ITIMER_VIRTUAL, &timer, NULL))
+    catch (std::exception &e)
     {
-        std::cerr << SYSTEM_ERROR << std::endl;
+        std::cerr << LIBRARY_ERROR << "could not spawn thread" << std::endl;
+        unblockSignals();
         return FAILURE;
     }
-    //TODO set timer
 
+    runningThread->raisinCountQuantom();
+    threads[0] = runningThread;
+
+    if (sigemptyset(&set))
+    {
+        std::cerr << SYSTEM_ERROR << "failed to call sigemptyset" << std::endl;
+        exit(1);
+    }
+
+//    if (sigemptyset(&sa.sa_mask)) //TODO check do if we need this? no effect on tests.
+//    {
+//        std::cerr << SYSTEM_ERROR << "failed to call sigemptyset" << std::endl;
+//        exit(1);
+//    }
+
+    sa.sa_flags = 0;
+    setTimer();
+    sa.sa_handler = &timer_handler;
+
+    if (sigaddset(&set, SIGVTALRM))
+    {
+        std::cerr << SYSTEM_ERROR << "failed to call sig add set" << std::endl;
+    }
+
+    if (sigaction(SIGVTALRM, &sa, nullptr))
+    {
+        std::cerr << SYSTEM_ERROR<< " sigaction failure" << std::endl;
+        exit(1);
+    }
 
     return SUCCESS;
 };
 
-
-//void sig_func()
-//{
-//
-//}
 
 /*
  * Description: This function creates a new thread, whose entry point is the
@@ -238,24 +215,36 @@ int uthread_init(const int *quantum_usecs, int size)
 int uthread_spawn(void (*f)(void), int priority)
 {
     blockSignals();
-    int tidThread = availibleIDs.top();
 
-    if (tidThread >= MAX_THREAD_NUM) //there couldn't be numbers bigger then max thread num
+    if (threads.size() >= MAX_THREAD_NUM) //there couldn't be numbers bigger then max thread num
     {
-        std::cerr << LIBRARY_ERROR " could not spawn more threads" << std::endl;
+        std::cerr << LIBRARY_ERROR << " could not spawn more threads" << std::endl;
         unblockSignals();
         return FAILURE;
     }
     if (priority >= sizeOfQuantomArray || priority < 0)
     {
-        std::cerr << LIBRARY_ERROR " priority is invalid" << std::endl;
+        std::cerr << LIBRARY_ERROR << " priority is invalid" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-    Thread *newThread = new Thread(tidThread, priority, f); // todo check if allocated stack for thread
-    // todo check if need to do try and catch in case can't allocate space for thread etc..
-    newThread->setState(State::READY); // todo check if this is necessary for later use
+
+    int tidThread = availibleIDs.top();
+    Thread *newThread;
+
+    try
+    {
+        newThread = new Thread(tidThread, priority, f);
+    }
+
+    catch( std::bad_alloc &)
+    {
+        std::cerr << SYSTEM_ERROR <<"bad alloc" <<std::endl;
+        unblockSignals();
+        exit(1);
+    }
     availibleIDs.pop();
+
     ReadyQueue.push_back(newThread);
     threads[tidThread] = newThread;
     unblockSignals();
@@ -270,19 +259,32 @@ int uthread_spawn(void (*f)(void), int priority)
 */
 int uthread_change_priority(int tid, int priority)
 {
-    Thread *threadToChange = threads.find(tid)->second;
-    if(threadToChange == nullptr)
+    blockSignals(); //TODO CHECK IF NEED TO ADD THIS, had no effect on tests
+    if(threads.find(tid) == threads.end())
     {
-        std::cerr << LIBRARY_ERROR " invalid id number" << std::endl;
+        std::cerr << LIBRARY_ERROR << " invalid id number" << std::endl;
         return FAILURE;
     }
-//    if(threadToChange->getState() == RUNNING)
-//    {
-//        // not sure if we are using priority while running
-//    }
+    Thread *threadToChange = threads.find(tid)->second;
+
     threadToChange->setPriority(priority);
+    unblockSignals();
     return 0;
 }
+
+
+void remove_thread_from_ready_queue(int tid)
+{
+    std::deque<Thread*>::iterator th;
+    for(th = ReadyQueue.begin(); th != ReadyQueue.end(); ++th)
+    {
+        if((*th)->getId() == tid)
+        {
+            ReadyQueue.erase(th);
+        }
+    }
+}
+
 
 /*
  * Description: This function blocks the thread with ID tid. The thread may
@@ -296,38 +298,39 @@ int uthread_change_priority(int tid, int priority)
 int uthread_block(int tid)
 {
     blockSignals();
-
-    if (tid <= 0 || tid > MAX_THREAD_NUM)
+    bool jump = false;
+    if (tid <= 0 || tid >= MAX_THREAD_NUM)
     {
-        std::cerr << LIBRARY_ERROR "can't block thread with illegal tid" << std::endl;
+        std::cerr << LIBRARY_ERROR << "can't block thread with illegal tid" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-
+    if (threads.find(tid) == threads.end())
+    {
+        std::cerr << LIBRARY_ERROR << "can't block non existed thread" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
     Thread *threadToBlock = threads.find(tid) -> second;
-    if (threadToBlock == nullptr)
-    {
-        std::cerr << LIBRARY_ERROR "can't block non existed thread" << std::endl;
-        unblockSignals();
-        return FAILURE;
-    }
-
     if (threadToBlock -> getState() == BLOCKED)
     {
         unblockSignals();
         return SUCCESS;
     }
-
-    if (sigsetjmp(threadToBlock -> getEnv(), 1))
+    if (threadToBlock -> getState() == RUNNING)
     {
-
-
-        std::cerr << SYSTEM_ERROR "sygsetjmp failed" << std::endl;
-        unblockSignals();
-        return FAILURE;
+        jump = true;
+    }
+    else //ready state
+    {
+        remove_thread_from_ready_queue(tid);
+        sigsetjmp(runningThread -> getEnv(), 1);
     }
     threadToBlock -> setState(BLOCKED);
-    timer_handler(0);
+    if(jump)
+    {
+        setThreadToRun();
+    }
     unblockSignals();
     return SUCCESS;
 }
@@ -343,37 +346,27 @@ int uthread_resume(int tid)
 {
     blockSignals();
 
-    if (tid <= 0 || tid > MAX_THREAD_NUM)
+    if (tid <= 0 || tid >= MAX_THREAD_NUM)
     {
-        std::cerr << LIBRARY_ERROR "can't block thread with illegal tid" << std::endl;
+        std::cerr << LIBRARY_ERROR << "can't resume thread with illegal tid" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-
-    Thread *threadToBlock = threads.find(tid) -> second;
-    if (threadToBlock == nullptr)
+    if (threads.find(tid) == threads.end())
     {
-        std::cerr << LIBRARY_ERROR "can't block non existed thread" << std::endl;
+        std::cerr << LIBRARY_ERROR <<"can't resume non existed thread" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-
-    if (threadToBlock -> getState() != BLOCKED)
+    Thread *threadToResume = threads.find(tid) -> second;
+    if (threadToResume -> getState() != BLOCKED)
     {
         unblockSignals();
         return SUCCESS;
     }
 
-    if (sigsetjmp(threadToBlock -> getEnv(), 1))
-    {
-
-
-        std::cerr << SYSTEM_ERROR "sygsetjmp failed" << std::endl;
-        unblockSignals();
-        return FAILURE;
-    }
-    threadToBlock -> setState(READY);
-    ReadyQueue.push_back(threadToBlock);
+    threadToResume -> setState(READY);
+    ReadyQueue.push_back(threadToResume);
     unblockSignals();
     return SUCCESS;
 }
@@ -391,45 +384,62 @@ int uthread_resume(int tid)
 */
 int uthread_terminate(int tid)
 {
-    if( tid == 0)
+    blockSignals();
+
+    if (tid < 0 || tid >= MAX_THREAD_NUM)
+    {
+        std::cerr << LIBRARY_ERROR << " invalid id number" << std::endl;
+        unblockSignals();
+        return  FAILURE;
+    }
+
+    if (tid == MAIN_THREAD)
     {
         for (auto const& thread:threads )
         {
-            uthread_terminate(thread.first);
+            delete(thread.second);
         }
+
         ReadyQueue.clear();
+        threads.clear();
+
         while(!availibleIDs.empty())
         {
             availibleIDs.pop();
         }
-        threads.clear();
+
+        unblockSignals();
         exit(EXIT_SUCCESS);
     }
-    if (tid < 0 || tid > MAX_THREAD_NUM)
+
+    if (threads.find(tid) == threads.end()) // if doesn't exist
     {
-        std::cerr << LIBRARY_ERROR " invalid id number" << std::endl;
-        return  FAILURE;
+        std::cerr << LIBRARY_ERROR <<"can't terminate non existed thread" << std::endl;
+        unblockSignals();
+        return FAILURE;
     }
-    Thread *toTerminate = threads.find(tid)->second;
+
+    Thread *toTerminate = threads.find(tid)->second; // todo i think this is redundant ?
     if(toTerminate == nullptr)
     {
-        std::cerr << LIBRARY_ERROR " there is ni thread with this id" << std::endl;
+        std::cerr << LIBRARY_ERROR << " there is no thread with this id" << std::endl;
+        unblockSignals();
         return FAILURE;
     }
     availibleIDs.push(tid);
     threads.erase(tid);
+
     if(toTerminate ->getState() == READY)
     {
-        std::deque<Thread*>::iterator th;
-        for(th = ReadyQueue.begin(); th != ReadyQueue.end(); ++th)
-        {
-            if((*th)->getId() == tid)
-            {
-                ReadyQueue.erase(th);
-            }
-        }
+        remove_thread_from_ready_queue(tid);
     }
+    else // in ready state
+    {
+        setThreadToRun();
+    }
+
     delete(toTerminate);
+    unblockSignals();
     return  SUCCESS;
 }
 
@@ -454,12 +464,7 @@ int uthread_get_tid()
 int uthread_get_total_quantums()
 {
     return totalQuantums;
-//    int total = 0;
-//    for (auto const& x : threads)
-//    {
-//        total += x.second->getCountQuantom(); // not sure... maybe we need just a variable with all quantums?
-//    }
-//    return total;
+
 }
 
 
@@ -475,15 +480,15 @@ int uthread_get_total_quantums()
 */
 int uthread_get_quantums(int tid)
 {
-    if (threads.find(tid)->second != NULL)
+    blockSignals();
+    if (threads.find(tid) != threads.end())
     {
-        return threads.find(tid)->second -> getCountQuantom();
+        int quantums = threads.find(tid)->second -> getCountQuantom();
+        unblockSignals();
+        return quantums;
     }
-    std::cerr << LIBRARY_ERROR "invalid id" <<std::endl;
+    std::cerr << LIBRARY_ERROR << "invalid id" <<std::endl;
+    unblockSignals();
     return FAILURE;
 }
 
-//int main()
-//{
-//    return  0;
-//}

@@ -47,18 +47,22 @@ address_t translate_address(address_t addr)
 
 Thread::Thread(int idThread ,int priority, void (*f)(void))
 {
-    this->_idThread = idThread;
-    this -> _priority = priority;
-    this -> _state = READY;
-    this -> _countQuantom = 0;
+    _idThread = idThread;
+    _priority = priority;
+    _state = READY;
+    _countQuantom = 0;
     address_t sp, pc;
 
-    sp = (address_t)_stack + STACK_SIZE - sizeof(address_t);
+    sp = (address_t)(_stack) + STACK_SIZE - sizeof(address_t);
     pc = (address_t)f;
     sigsetjmp(_env, 1);
     _env ->__jmpbuf[JB_SP] = translate_address(sp);
     _env ->__jmpbuf[JB_PC] = translate_address(pc);
-    sigemptyset(&_env->__saved_mask);
+    sigemptyset(&(_env)->__saved_mask);
+}
+
+Thread::~Thread()
+{
 }
 
 int Thread::getId()
@@ -71,14 +75,14 @@ State Thread::getState() const
     return _state;
 }
 
- void Thread::setState(State state)
+void Thread::setState(State state)
 {
-    this -> _state =  state;
+    _state =  state;
 }
 
 void Thread::setPriority(int prioriry)
 {
-    this -> _priority = prioriry;
+    _priority = prioriry;
 }
 
 int Thread::getCountQuantom()
@@ -101,10 +105,7 @@ int Thread::getPriority()
 }
 
 
-void setFFunc()
-{
 
-}
 
 
 

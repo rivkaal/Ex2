@@ -7,7 +7,7 @@
  */
 
 #define MAX_THREAD_NUM 100 /* maximal number of threads */
-#define STACK_SIZE 4096 /* stack size per thread (in bytes) */
+#define STACK_SIZE 8192 /* stack size per thread (in bytes) */
 
 /* External interface */
 
@@ -16,7 +16,7 @@
  * Description: This function initializes the thread library.
  * You may assume that this function is called before any other thread library
  * function, and that it is called exactly once. The input to the function is
- * an array of the length of a quantum in micro-seconds for each priority. 
+ * an array of the length of a quantum in micro-seconds for each priority.
  * It is an error to call this function with an array containing non-positive integer.
  * size - is the size of the array.
  * Return value: On success, return 0. On failure, return -1.
