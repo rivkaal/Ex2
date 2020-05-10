@@ -12,7 +12,7 @@
 #include <deque>
 #include <map>
 #include <cmath>
-#include <algorithm>
+#include <string>
 
 //-----------------DEFINES-----------------//
 #define LIBRARY_ERROR "thread library error: "
@@ -85,17 +85,20 @@ void setTimer()
 
 void setThreadToRun()
 {
-    totalQuantums++;
     int val = sigsetjmp(runningThread -> getEnv(), 1);
-    if (val == 0)
+    if (val != 0)
     {
-        runningThread = ReadyQueue.front();
-        runningThread->setState(RUNNING);
-        runningThread->raisinCountQuantom();
-        ReadyQueue.pop_front();
-        setTimer();
-        siglongjmp(runningThread->getEnv(), 1);
+        return;
     }
+
+    runningThread = ReadyQueue.front();
+    runningThread->setState(RUNNING);
+    runningThread->raisinCountQuantom();
+    totalQuantums++;
+    ReadyQueue.pop_front();
+    setTimer();
+    siglongjmp(runningThread->getEnv(), 1);
+
 }
 
 
@@ -109,11 +112,14 @@ void timer_handler(int sig)
     {
         runningThread->raisinCountQuantom();
         totalQuantums++;
-    } else{
+    }
+    else
+    {
         runningThread->setState(READY);
         ReadyQueue.push_back(runningThread);
         setThreadToRun();
     }
+
     unblockSignals();
 }
 
@@ -167,6 +173,7 @@ int uthread_init(int *quantum_usecs, int size)
         return FAILURE;
     }
 
+    runningThread->setState(RUNNING); //TODO i've added this
     runningThread->raisinCountQuantom();
     threads[0] = runningThread;
 
@@ -222,7 +229,8 @@ int uthread_spawn(void (*f)(void), int priority)
         unblockSignals();
         return FAILURE;
     }
-    if (priority >= sizeOfQuantomArray || priority < 0)
+//    if (priority >= sizeOfQuantomArray || priority < 0) //TODO CHECK THIS
+    if (priority < 0)
     {
         std::cerr << LIBRARY_ERROR << " priority is invalid" << std::endl;
         unblockSignals();
@@ -237,12 +245,13 @@ int uthread_spawn(void (*f)(void), int priority)
         newThread = new Thread(tidThread, priority, f);
     }
 
-    catch( std::bad_alloc &)
+    catch(std::bad_alloc &e)
     {
         std::cerr << SYSTEM_ERROR <<"bad alloc" <<std::endl;
         unblockSignals();
         exit(1);
     }
+
     availibleIDs.pop();
 
     ReadyQueue.push_back(newThread);
@@ -250,6 +259,24 @@ int uthread_spawn(void (*f)(void), int priority)
     unblockSignals();
     return tidThread;
 };
+
+
+bool check_if_legal(int tid, const std::string& msg, const std::string& anotherMsg)
+{
+    if (tid <= 0 || tid >= MAX_THREAD_NUM)
+    {
+        std::cerr << LIBRARY_ERROR << msg << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+    if (threads.find(tid) == threads.end())
+    {
+        std::cerr << LIBRARY_ERROR <<anotherMsg << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
+    return SUCCESS;
+}
 
 /*
  * Description: This function changes the priority of the thread with ID tid.
@@ -260,16 +287,21 @@ int uthread_spawn(void (*f)(void), int priority)
 int uthread_change_priority(int tid, int priority)
 {
     blockSignals(); //TODO CHECK IF NEED TO ADD THIS, had no effect on tests
-    if(threads.find(tid) == threads.end())
+    if (check_if_legal(tid, "illegal tid", "non existing thread"))
     {
-        std::cerr << LIBRARY_ERROR << " invalid id number" << std::endl;
         return FAILURE;
     }
     Thread *threadToChange = threads.find(tid)->second;
+    if (threadToChange == nullptr)
+    {
+        std::cerr << LIBRARY_ERROR << " cant create thread" << std::endl;
+        unblockSignals();
+        return FAILURE;
+    }
 
     threadToChange->setPriority(priority);
     unblockSignals();
-    return 0;
+    return SUCCESS;
 }
 
 
@@ -299,41 +331,47 @@ int uthread_block(int tid)
 {
     blockSignals();
     bool jump = false;
-    if (tid <= 0 || tid >= MAX_THREAD_NUM)
+
+    if (check_if_legal(tid, "can't block thread with illegal tid", "can't block non existed thread"))
     {
-        std::cerr << LIBRARY_ERROR << "can't block thread with illegal tid" << std::endl;
-        unblockSignals();
         return FAILURE;
     }
-    if (threads.find(tid) == threads.end())
+
+    Thread *threadToBlock = threads.find(tid) -> second;
+    if (threadToBlock == nullptr)
     {
         std::cerr << LIBRARY_ERROR << "can't block non existed thread" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-    Thread *threadToBlock = threads.find(tid) -> second;
+
     if (threadToBlock -> getState() == BLOCKED)
     {
         unblockSignals();
         return SUCCESS;
     }
+
+    threadToBlock -> setState(BLOCKED);
+
     if (threadToBlock -> getState() == RUNNING)
     {
         jump = true;
     }
+
     else //ready state
     {
         remove_thread_from_ready_queue(tid);
-        sigsetjmp(runningThread -> getEnv(), 1);
     }
-    threadToBlock -> setState(BLOCKED);
+
     if(jump)
     {
         setThreadToRun();
     }
+
     unblockSignals();
     return SUCCESS;
 }
+
 
 /*
  * Description: This function resumes a blocked thread with ID tid and moves
@@ -346,19 +384,19 @@ int uthread_resume(int tid)
 {
     blockSignals();
 
-    if (tid <= 0 || tid >= MAX_THREAD_NUM)
+    if (check_if_legal(tid,  "can't resume thread with illegal tid", "can't resume non existed thread"))
     {
-        std::cerr << LIBRARY_ERROR << "can't resume thread with illegal tid" << std::endl;
-        unblockSignals();
         return FAILURE;
     }
-    if (threads.find(tid) == threads.end())
+
+    Thread *threadToResume = threads.find(tid) -> second;
+    if (threadToResume == nullptr)
     {
         std::cerr << LIBRARY_ERROR <<"can't resume non existed thread" << std::endl;
         unblockSignals();
         return FAILURE;
     }
-    Thread *threadToResume = threads.find(tid) -> second;
+
     if (threadToResume -> getState() != BLOCKED)
     {
         unblockSignals();
@@ -370,6 +408,29 @@ int uthread_resume(int tid)
     unblockSignals();
     return SUCCESS;
 }
+
+
+void terminate_main_thread()
+{
+    for (auto & thread:threads )
+    {
+        delete(thread.second);
+        thread.second = nullptr;
+    }
+
+    ReadyQueue.clear();
+    threads.clear();
+
+    while(!availibleIDs.empty())
+    {
+        availibleIDs.pop();
+    }
+
+//    threads.erase(tid); //TODO check if need
+    unblockSignals();
+    exit(EXIT_SUCCESS);
+}
+
 
 /*
  * Description: This function terminates the thread with ID tid and deletes
@@ -386,62 +447,44 @@ int uthread_terminate(int tid)
 {
     blockSignals();
 
-    if (tid < 0 || tid >= MAX_THREAD_NUM)
+    if (check_if_legal(tid, "invalid id number", "can't terminate non existed thread" ))
     {
-        std::cerr << LIBRARY_ERROR << " invalid id number" << std::endl;
-        unblockSignals();
-        return  FAILURE;
+        return FAILURE;
     }
 
     if (tid == MAIN_THREAD)
     {
-        for (auto const& thread:threads )
-        {
-            delete(thread.second);
-        }
-
-        ReadyQueue.clear();
-        threads.clear();
-
-        while(!availibleIDs.empty())
-        {
-            availibleIDs.pop();
-        }
-
-        unblockSignals();
-        exit(EXIT_SUCCESS);
+        terminate_main_thread();
     }
 
-    if (threads.find(tid) == threads.end()) // if doesn't exist
-    {
-        std::cerr << LIBRARY_ERROR <<"can't terminate non existed thread" << std::endl;
-        unblockSignals();
-        return FAILURE;
-    }
 
-    Thread *toTerminate = threads.find(tid)->second; // todo i think this is redundant ?
-    if(toTerminate == nullptr)
+    Thread *toTerminate = threads.find(tid)->second;
+    if(toTerminate == nullptr) // todo i think this is redundant ?
     {
         std::cerr << LIBRARY_ERROR << " there is no thread with this id" << std::endl;
         unblockSignals();
         return FAILURE;
     }
+
     availibleIDs.push(tid);
     threads.erase(tid);
 
-    if(toTerminate ->getState() == READY)
+    if (toTerminate ->getState() == READY)
     {
         remove_thread_from_ready_queue(tid);
     }
-    else // in ready state
+    else // in running state
     {
         setThreadToRun();
     }
 
     delete(toTerminate);
+    toTerminate = nullptr;
+
     unblockSignals();
     return  SUCCESS;
 }
+
 
 /*
  * Description: This function returns the thread ID of the calling thread.
@@ -464,7 +507,6 @@ int uthread_get_tid()
 int uthread_get_total_quantums()
 {
     return totalQuantums;
-
 }
 
 
