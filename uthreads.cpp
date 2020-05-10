@@ -85,6 +85,8 @@ void setTimer()
 
 void setThreadToRun()
 {
+
+    totalQuantums++;
     int val = sigsetjmp(runningThread -> getEnv(), 1);
     if (val != 0)
     {
@@ -94,7 +96,6 @@ void setThreadToRun()
     runningThread = ReadyQueue.front();
     runningThread->setState(RUNNING);
     runningThread->raisinCountQuantom();
-    totalQuantums++;
     ReadyQueue.pop_front();
     setTimer();
     siglongjmp(runningThread->getEnv(), 1);
@@ -229,8 +230,7 @@ int uthread_spawn(void (*f)(void), int priority)
         unblockSignals();
         return FAILURE;
     }
-//    if (priority >= sizeOfQuantomArray || priority < 0) //TODO CHECK THIS
-    if (priority < 0)
+    if (priority >= sizeOfQuantomArray || priority < 0) //TODO CHECK THIS
     {
         std::cerr << LIBRARY_ERROR << " priority is invalid" << std::endl;
         unblockSignals();
@@ -263,7 +263,7 @@ int uthread_spawn(void (*f)(void), int priority)
 
 bool check_if_legal(int tid, const std::string& msg, const std::string& anotherMsg)
 {
-    if (tid <= 0 || tid >= MAX_THREAD_NUM)
+    if (tid < 0 || tid >= MAX_THREAD_NUM)
     {
         std::cerr << LIBRARY_ERROR << msg << std::endl;
         unblockSignals();
@@ -338,9 +338,9 @@ int uthread_block(int tid)
     }
 
     Thread *threadToBlock = threads.find(tid) -> second;
-    if (threadToBlock == nullptr)
+    if (threadToBlock == nullptr || tid == 0)
     {
-        std::cerr << LIBRARY_ERROR << "can't block non existed thread" << std::endl;
+        std::cerr << LIBRARY_ERROR << "can't block this thread" << std::endl;
         unblockSignals();
         return FAILURE;
     }
@@ -350,9 +350,6 @@ int uthread_block(int tid)
         unblockSignals();
         return SUCCESS;
     }
-
-    threadToBlock -> setState(BLOCKED);
-
     if (threadToBlock -> getState() == RUNNING)
     {
         jump = true;
@@ -362,7 +359,7 @@ int uthread_block(int tid)
     {
         remove_thread_from_ready_queue(tid);
     }
-
+    threadToBlock -> setState(BLOCKED);
     if(jump)
     {
         setThreadToRun();
