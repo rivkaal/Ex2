@@ -120,7 +120,6 @@ void timer_handler(int sig)
         ReadyQueue.push_back(runningThread);
         setThreadToRun();
     }
-
     unblockSignals();
 }
 
@@ -136,6 +135,7 @@ void timer_handler(int sig)
 */
 int uthread_init(int *quantum_usecs, int size)
 {
+    blockSignals();
     if (size <= 0)
     {
         std::cerr << LIBRARY_ERROR << " Invalid size"<< std::endl;
@@ -197,6 +197,7 @@ int uthread_init(int *quantum_usecs, int size)
     if (sigaddset(&set, SIGVTALRM))
     {
         std::cerr << SYSTEM_ERROR << "failed to call sig add set" << std::endl;
+        exit(1);
     }
 
     if (sigaction(SIGVTALRM, &sa, nullptr))
@@ -204,6 +205,7 @@ int uthread_init(int *quantum_usecs, int size)
         std::cerr << SYSTEM_ERROR<< " sigaction failure" << std::endl;
         exit(1);
     }
+    unblockSignals();
 
     return SUCCESS;
 };
@@ -313,6 +315,7 @@ void remove_thread_from_ready_queue(int tid)
         if((*th)->getId() == tid)
         {
             ReadyQueue.erase(th);
+            return;
         }
     }
 }
@@ -334,6 +337,7 @@ int uthread_block(int tid)
 
     if (check_if_legal(tid, "can't block thread with illegal tid", "can't block non existed thread"))
     {
+        unblockSignals();
         return FAILURE;
     }
 
@@ -423,7 +427,6 @@ void terminate_main_thread()
         availibleIDs.pop();
     }
 
-//    threads.erase(tid); //TODO check if need
     unblockSignals();
     exit(EXIT_SUCCESS);
 }
@@ -446,6 +449,7 @@ int uthread_terminate(int tid)
 
     if (check_if_legal(tid, "invalid id number", "can't terminate non existed thread" ))
     {
+        unblockSignals();
         return FAILURE;
     }
 
@@ -459,6 +463,7 @@ int uthread_terminate(int tid)
     if(toTerminate == nullptr) // todo i think this is redundant ?
     {
         std::cerr << LIBRARY_ERROR << " there is no thread with this id" << std::endl;
+        std::cout << "shouldn't happened" << std::endl;
         unblockSignals();
         return FAILURE;
     }
@@ -470,8 +475,12 @@ int uthread_terminate(int tid)
     {
         remove_thread_from_ready_queue(tid);
     }
-    else // in running state
+    else if (toTerminate -> getState() == RUNNING)
     {
+        if(ReadyQueue.empty())
+        {
+            std::cout << "shouldn't be" << std::endl;
+        }
         setThreadToRun();
     }
 
